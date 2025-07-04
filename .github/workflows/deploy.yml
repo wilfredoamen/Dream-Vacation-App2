@@ -1,42 +1,57 @@
 name: Deploy to EC2
-  env:
-    EC2_HOST: ${{ secrets.EC2_HOST }}
-    EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
-    EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-    RDS_HOST: ${{ secrets.RDS_HOST }}
-    RDS_USERNAME: ${{ secrets.RDS_USERNAME }}
-    RDS_PASSWORD: ${{ secrets.RDS_PASSWORD }}
-    RDS_DATABASE: ${{ secrets.RDS_DATABASE }}
-    DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  run: |
-    # Save SSH key to a file
-    echo "$EC2_SSH_KEY" > ssh_key
-    chmod 600 ssh_key
 
-    # Copy docker-compose.yml and SQL dump to EC2
-    scp -i ssh_key -o StrictHostKeyChecking=no docker-compose.yml $EC2_USERNAME@$EC2_HOST:/home/$EC2_USERNAME/
-    scp -i ssh_key -o StrictHostKeyChecking=no dreamvacations.sql $EC2_USERNAME@$EC2_HOST:/home/$EC2_USERNAME/
+on:
+  push:
+    branches:
+      - main  # or replace with your branch name
 
-    # SSH into EC2 and deploy
-    ssh -i ssh_key -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_HOST << 'EOF'
-      # Import SQL dump into RDS
-      mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD -D $RDS_DATABASE < /home/$EC2_USERNAME/dreamvacations.sql
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
 
-      # Pull the latest images
-      docker pull $DOCKERHUB_USERNAME/dream-vacation-backend:latest
-      docker pull $DOCKERHUB_USERNAME/dream-vacation-frontend:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      # Set environment variables for docker-compose
-      export RDS_HOST=$RDS_HOST
-      export RDS_USERNAME=$RDS_USERNAME
-      export RDS_PASSWORD=$RDS_PASSWORD
-      export RDS_DATABASE=$RDS_DATABASE
+      - name: Deploy with SSH and Docker Compose
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          RDS_HOST: ${{ secrets.RDS_HOST }}
+          RDS_USERNAME: ${{ secrets.RDS_USERNAME }}
+          RDS_PASSWORD: ${{ secrets.RDS_PASSWORD }}
+          RDS_DATABASE: ${{ secrets.RDS_DATABASE }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          # Save SSH key to a file
+          echo "$EC2_SSH_KEY" > ssh_key
+          chmod 600 ssh_key
 
-      # Run docker-compose
-      cd /home/$EC2_USERNAME
-      docker-compose down
-      docker-compose up -d
-    EOF
+          # Copy files to EC2
+          scp -i ssh_key -o StrictHostKeyChecking=no docker-compose.yml $EC2_USERNAME@$EC2_HOST:/home/$EC2_USERNAME/
+          scp -i ssh_key -o StrictHostKeyChecking=no dreamvacations.sql $EC2_USERNAME@$EC2_HOST:/home/$EC2_USERNAME/
 
-    # Clean up SSH key
-    rm ssh_key
+          # SSH into EC2 and deploy
+          ssh -i ssh_key -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_HOST << EOF
+            export RDS_HOST=${RDS_HOST}
+            export RDS_USERNAME=${RDS_USERNAME}
+            export RDS_PASSWORD=${RDS_PASSWORD}
+            export RDS_DATABASE=${RDS_DATABASE}
+            export DOCKERHUB_USERNAME=${DOCKERHUB_USERNAME}
+
+            # Import SQL dump into RDS
+            mysql -h \$RDS_HOST -u \$RDS_USERNAME -p\$RDS_PASSWORD -D \$RDS_DATABASE < /home/$EC2_USERNAME/dreamvacations.sql
+
+            # Pull latest images
+            docker pull \$DOCKERHUB_USERNAME/dream-vacation-backend:latest
+            docker pull \$DOCKERHUB_USERNAME/dream-vacation-frontend:latest
+
+            # Run docker-compose
+            cd /home/$EC2_USERNAME
+            docker-compose down
+            docker-compose up -d
+          EOF
+
+          # Clean up
+          rm ssh_key
