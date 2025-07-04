@@ -42,7 +42,7 @@ jobs:
 
             # Connect to RDS with mysql shell, create and use the database
             mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD <<EOSQL
-CREATE DATABASE IF NOT EXISTS $RDS_DATABASE;
+CREATE DATABASE $RDS_DATABASE;
 USE $RDS_DATABASE;
 EXIT;
 EOSQL
