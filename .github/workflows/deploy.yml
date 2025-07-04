@@ -23,6 +23,11 @@ jobs:
           RDS_PASSWORD: ${{ secrets.RDS_PASSWORD }}
           RDS_DATABASE: ${{ secrets.RDS_DATABASE }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          RDS_DATABASE: ${{ secrets.RDS_DATABASE }}
+
         run: |
           # Save SSH key to a file
           echo "$EC2_SSH_KEY" > ssh_key
