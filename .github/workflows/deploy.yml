@@ -44,7 +44,7 @@ jobs:
             mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD <<EOSQL
             CREATE DATABASE $RDS_DATABASE;
             USE $RDS_DATABASE;
-            EOSQL
+          EOSQL
 
             # Import SQL dump into RDS
             mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD $RDS_DATABASE < /home/$EC2_USERNAME/dreamvacations.sql
