@@ -42,7 +42,7 @@ jobs:
 
             # Create database if not exists and use it
             mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD <<EOSQL
-            CREATE DATABASE $RDS_DATABASE;
+            CREATE DATABASE IF NOT EXISTS $RDS_DATABASE;
             USE $RDS_DATABASE;
           EOSQL
 
