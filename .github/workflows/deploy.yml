@@ -3,7 +3,7 @@ name: Deploy to EC2
 on:
   push:
     branches:
-      - main  # or replace with your branch name
+      - main
 
 jobs:
   deploy:
@@ -33,19 +33,26 @@ jobs:
           scp -i ssh_key -o StrictHostKeyChecking=no dreamvacations.sql $EC2_USERNAME@$EC2_HOST:/home/$EC2_USERNAME/
 
           # SSH into EC2 and deploy
-          ssh -i ssh_key -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_HOST << EOF
-            export RDS_HOST=${RDS_HOST}
-            export RDS_USERNAME=${RDS_USERNAME}
-            export RDS_PASSWORD=${RDS_PASSWORD}
-            export RDS_DATABASE=${RDS_DATABASE}
-            export DOCKERHUB_USERNAME=${DOCKERHUB_USERNAME}
+          ssh -i ssh_key -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_HOST << 'EOF'
+            export DEBIAN_FRONTEND=noninteractive
 
-            # Import SQL dump into RDS
-            mysql -h \$RDS_HOST -u \$RDS_USERNAME -p\$RDS_PASSWORD -D \$RDS_DATABASE < /home/$EC2_USERNAME/dreamvacations.sql
+            # Install MySQL Shell
+            sudo apt-get update -y
+            sudo apt-get install -y mysql-client
+
+            # Connect to RDS with mysql shell, create and use the database
+            mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD <<EOSQL
+CREATE DATABASE IF NOT EXISTS $RDS_DATABASE;
+USE $RDS_DATABASE;
+EXIT;
+EOSQL
+
+            # Import SQL dump
+            mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD $RDS_DATABASE < /home/$EC2_USERNAME/dreamvacations.sql
 
             # Pull latest images
-            docker pull \$DOCKERHUB_USERNAME/dream-vacation-backend:latest
-            docker pull \$DOCKERHUB_USERNAME/dream-vacation-frontend:latest
+            docker pull $DOCKERHUB_USERNAME/dream-vacation-backend:latest
+            docker pull $DOCKERHUB_USERNAME/dream-vacation-frontend:latest
 
             # Run docker-compose
             cd /home/$EC2_USERNAME
@@ -55,3 +62,4 @@ jobs:
 
           # Clean up
           rm ssh_key
+
