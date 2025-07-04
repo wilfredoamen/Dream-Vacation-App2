@@ -34,27 +34,26 @@ jobs:
 
           # SSH into EC2 and deploy
           ssh -i ssh_key -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_HOST << 'EOF'
-            export DEBIAN_FRONTEND=noninteractive
+            set -e  # Exit on error
 
-            # Install MySQL Shell
+            # Install MySQL client
             sudo apt-get update -y
             sudo apt-get install -y mysql-client
 
-            # Connect to RDS with mysql shell, create and use the database
+            # Create database if not exists and use it
             mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD <<EOSQL
 CREATE DATABASE IF NOT EXISTS $RDS_DATABASE;
 USE $RDS_DATABASE;
-EXIT;
 EOSQL
 
-            # Import SQL dump
+            # Import SQL dump into RDS
             mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD $RDS_DATABASE < /home/$EC2_USERNAME/dreamvacations.sql
 
-            # Pull latest images
+            # Pull latest images from DockerHub
             docker pull $DOCKERHUB_USERNAME/dream-vacation-backend:latest
             docker pull $DOCKERHUB_USERNAME/dream-vacation-frontend:latest
 
-            # Run docker-compose
+            # Navigate and deploy
             cd /home/$EC2_USERNAME
             docker-compose down
             docker-compose up -d
@@ -62,4 +61,3 @@ EOSQL
 
           # Clean up
           rm ssh_key
-
