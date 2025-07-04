@@ -13,8 +13,8 @@ app.use(express.json());
 
 // MySQL Connection Pool
 const pool = mysql.createPool({
-  host: 'localhost', // Replace with your host if different
-  user: 'root', // Replace with your MySQL username
+  host: 'dreamvacations.c2jy4428k504.us-east-1.rds.amazonaws.com', // Replace with your host if different
+  user: 'admin', // Replace with your MySQL username
   password: 'Oziegbe27', // Replace with your MySQL password
   database: 'dreamvacations', // Replace with your database name
   port: 3306, // Default MySQL port

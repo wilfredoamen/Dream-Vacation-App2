@@ -1,96 +1,42 @@
-name: Deploy Dream Vacation App to EC2 with Docker Hub
+- name: Deploy to EC2
+  env:
+    EC2_HOST: ${{ secrets.EC2_HOST }}
+    EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+    EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+    RDS_HOST: ${{ secrets.RDS_HOST }}
+    RDS_USERNAME: ${{ secrets.RDS_USERNAME }}
+    RDS_PASSWORD: ${{ secrets.RDS_PASSWORD }}
+    RDS_DATABASE: ${{ secrets.RDS_DATABASE }}
+    DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  run: |
+    # Save SSH key to a file
+    echo "$EC2_SSH_KEY" > ssh_key
+    chmod 600 ssh_key
 
-on:
-  push:
-    branches:
-      - main
+    # Copy docker-compose.yml and SQL dump to EC2
+    scp -i ssh_key -o StrictHostKeyChecking=no docker-compose.yml $EC2_USERNAME@$EC2_HOST:/home/$EC2_USERNAME/
+    scp -i ssh_key -o StrictHostKeyChecking=no dreamvacations.sql $EC2_USERNAME@$EC2_HOST:/home/$EC2_USERNAME/
 
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
+    # SSH into EC2 and deploy
+    ssh -i ssh_key -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_HOST << 'EOF'
+      # Import SQL dump into RDS
+      mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD -D $RDS_DATABASE < /home/$EC2_USERNAME/dreamvacations.sql
 
-    steps:
-    # Checkout the repository
-    - name: Checkout code
-      uses: actions/checkout@v3
+      # Pull the latest images
+      docker pull $DOCKERHUB_USERNAME/dream-vacation-backend:latest
+      docker pull $DOCKERHUB_USERNAME/dream-vacation-frontend:latest
 
-    # Set up Node.js
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
+      # Set environment variables for docker-compose
+      export RDS_HOST=$RDS_HOST
+      export RDS_USERNAME=$RDS_USERNAME
+      export RDS_PASSWORD=$RDS_PASSWORD
+      export RDS_DATABASE=$RDS_DATABASE
 
-    # Log in to Docker Hub
-    - name: Log in to Docker Hub
-      uses: docker/login-action@v2
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # Run docker-compose
+      cd /home/$EC2_USERNAME
+      docker-compose down
+      docker-compose up -d
+    EOF
 
-    # Build, tag, and push backend image to Docker Hub
-    - name: Build and push backend image
-      env:
-        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-        IMAGE_TAG: latest
-      run: |
-        cd backend
-        docker build -t $DOCKERHUB_USERNAME/dreamvacation-backend:$IMAGE_TAG .
-        docker push $DOCKERHUB_USERNAME/dreamvacation-backend:$IMAGE_TAG
-
-    # Build, tag, and push frontend image to Docker Hub
-    - name: Build and push frontend image
-      env:
-        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-        IMAGE_TAG: latest
-      run: |
-        cd frontend
-        docker build -t $DOCKERHUB_USERNAME/dreamvacation-frontend:$IMAGE_TAG .
-        docker push $DOCKERHUB_USERNAME/dreamvacation-frontend:$IMAGE_TAG
-
-    # Deploy to EC2
-    - name: Deploy to EC2
-      env:
-        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      run: |
-        echo "${{ secrets.EC2_SSH_KEY }}" > private_key.pem
-        chmod 600 private_key.pem
-        ssh -o StrictHostKeyChecking=no -i private_key.pem ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
-          # Log in to Docker Hub
-          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-
-          # Create or update docker-compose.yml
-          cat << 'EOC' > ~/dream-vacation-app/docker-compose.yml
-          version: "3.8"
-          services:
-            backend:
-              image: $DOCKERHUB_USERNAME/dreamvacation-backend:latest
-              container_name: dreamvacation-backend
-              restart: unless-stopped
-              ports:
-                - "3001:3001"
-              environment:
-                DATABASE_URL: mysql://admin:Oziegbe27@dreamvacations.c2jy4428k504.us-east-1.rds.amazonaws.com:3306/dreamvacations
-                PORT: 3001
-                COUNTRIES_API_BASE_URL: https://restcountries.com/v3.1
-            frontend:
-              image: $DOCKERHUB_USERNAME/dreamvacation-frontend:latest
-              container_name: dreamvacation-frontend
-              ports:
-                - "3000:3000"
-              environment:
-                REACT_APP_API_URL: http://localhost:3001
-              depends_on:
-                - backend
-          EOC
-
-          # Ensure the app directory exists
-          mkdir -p ~/dream-vacation-app
-          cd ~/dream-vacation-app
-
-          # Stop and remove existing containers
-          docker-compose down
-
-          # Pull and run the containers
-          docker-compose up -d
-        EOF
-        rm private_key.pem
+    # Clean up SSH key
+    rm ssh_key
