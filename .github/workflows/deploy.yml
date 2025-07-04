@@ -27,6 +27,11 @@ jobs:
           # Save SSH key to a file
           echo "$EC2_SSH_KEY" > ssh_key
           chmod 600 ssh_key
+         
+          if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$RDS_DATABASE" ]; then
+             echo "Required environment variables are missing. Exiting."
+             exit 1
+          fi
 
           # Copy files to EC2
           scp -i ssh_key -o StrictHostKeyChecking=no docker-compose.yml $EC2_USERNAME@$EC2_HOST:/home/$EC2_USERNAME/
@@ -39,16 +44,21 @@ jobs:
             # Install MySQL client
             sudo apt-get update -y
             sudo apt-get install -y mysql-client
+          
 
             # Create database if not exists and use it
             mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD <<EOSQL
             CREATE DATABASE IF NOT EXISTS $RDS_DATABASE;
             USE $RDS_DATABASE;
           EOSQL
-
-            # Import SQL dump into RDS
-            mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD $RDS_DATABASE < /home/$EC2_USERNAME/dreamvacations.sql
-
+            
+            # Check if the database is empty
+            if [ \$(mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD -e "USE $RDS_DATABASE; SHOW TABLES;" | wc -l) -eq 0 ]; then
+              echo "Database is empty, importing SQL dump."
+            else
+              echo "Database is not empty, skipping import."
+            fi            
+            
             # Pull latest images from DockerHub
             docker pull $DOCKERHUB_USERNAME/dream-vacation-backend:latest
             docker pull $DOCKERHUB_USERNAME/dream-vacation-frontend:latest
