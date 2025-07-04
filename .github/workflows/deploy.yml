@@ -23,53 +23,54 @@ jobs:
           RDS_PASSWORD: ${{ secrets.RDS_PASSWORD }}
           RDS_DATABASE: ${{ secrets.RDS_DATABASE }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-
-    
         run: |
-          # Save SSH key to a file
+          # Save SSH key to file
           echo "$EC2_SSH_KEY" > ssh_key
           chmod 600 ssh_key
-         
+
+          # Validate critical variables
           if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$RDS_DATABASE" ]; then
-             echo "Required environment variables are missing. Exiting."
-             exit 1
+            echo "Missing required environment variables. Exiting."
+            exit 1
           fi
 
           # Copy files to EC2
           scp -i ssh_key -o StrictHostKeyChecking=no docker-compose.yml $EC2_USERNAME@$EC2_HOST:/home/$EC2_USERNAME/
           scp -i ssh_key -o StrictHostKeyChecking=no dreamvacations.sql $EC2_USERNAME@$EC2_HOST:/home/$EC2_USERNAME/
 
-          # SSH into EC2 and deploy
-          ssh -i ssh_key -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_HOST << EOF
-            set -e  # Exit on error
+          # SSH into EC2 and run deployment script
+          ssh -i ssh_key -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_HOST <<EOF
+            set -e
 
             # Install MySQL client
             sudo apt-get update -y
             sudo apt-get install -y mysql-client
-          
 
-            # Create database if not exists and use it
-            mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD <<EOSQL
-            CREATE DATABASE IF NOT EXISTS $RDS_DATABASE;
-            USE $RDS_DATABASE;
-          EOSQL
-            
-            # Check if the database is empty
-            if [ \$(mysql -h $RDS_HOST -u $RDS_USERNAME -p$RDS_PASSWORD -e "USE $RDS_DATABASE; SHOW TABLES;" | wc -l) -eq 0 ]; then
-              echo "Database is empty, importing SQL dump."
+            # Create database if not exists
+            mysql -h \$RDS_HOST -u \$RDS_USERNAME -p\$RDS_PASSWORD <<EOSQL
+            CREATE DATABASE IF NOT EXISTS \$RDS_DATABASE;
+            USE \$RDS_DATABASE;
+            EOSQL
+
+            # Check if DB is empty
+            TABLE_COUNT=\$(mysql -h \$RDS_HOST -u \$RDS_USERNAME -p\$RDS_PASSWORD -D \$RDS_DATABASE -e "SHOW TABLES;" | wc -l)
+            if [ "\$TABLE_COUNT" -le 1 ]; then
+              echo "Database is empty. Importing SQL dump..."
+              mysql -h \$RDS_HOST -u \$RDS_USERNAME -p\$RDS_PASSWORD \$RDS_DATABASE < /home/$EC2_USERNAME/dreamvacations.sql
             else
-              echo "Database is not empty, skipping import."
-            fi            
-            
-            # Pull latest images from DockerHub
-            docker pull $DOCKERHUB_USERNAME/dream-vacation-backend:latest
-            docker pull $DOCKERHUB_USERNAME/dream-vacation-frontend:latest
+              echo "Database already has tables. Skipping import."
+            fi
 
-            # Navigate and deploy
+            # Pull latest Docker images
+            echo "Pulling image: \$DOCKERHUB_USERNAME/dream-vacation-backend:latest"
+            docker pull \$DOCKERHUB_USERNAME/dream-vacation-backend:latest
+            docker pull \$DOCKERHUB_USERNAME/dream-vacation-frontend:latest
+
+            # Start Docker containers
             cd /home/$EC2_USERNAME
             docker-compose down
             docker-compose up -d
-          EOF
+            EOF
 
-          # Clean up
+          # Cleanup
           rm ssh_key
