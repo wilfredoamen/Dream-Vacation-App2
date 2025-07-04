@@ -46,11 +46,6 @@ jobs:
             sudo apt-get update -y
             sudo apt-get install -y mysql-client
 
-            # Create database if not exists
-            mysql -h \$RDS_HOST -u \$RDS_USERNAME -p\$RDS_PASSWORD <<EOSQL
-            CREATE DATABASE IF NOT EXISTS \$RDS_DATABASE;
-            USE \$RDS_DATABASE;
-            EOSQL
 
             # Check if DB is empty
             TABLE_COUNT=\$(mysql -h \$RDS_HOST -u \$RDS_USERNAME -p\$RDS_PASSWORD -D \$RDS_DATABASE -e "SHOW TABLES;" | wc -l)
