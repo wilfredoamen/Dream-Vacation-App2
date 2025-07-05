@@ -12,7 +12,7 @@ services:
       - DB_NAME=${RDS_DATABASE}
     restart: always
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001"]
+      test: ["CMD", "curl", "-f", "http://54.227.116.230:3001"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -24,7 +24,7 @@ services:
       - "3000:3000"
     restart: always
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "curl", "-f", "http://54.227.116.230:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
