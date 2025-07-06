@@ -13,59 +13,57 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Deploy with SSH and Docker Compose
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          RDS_HOST: ${{ secrets.RDS_HOST }}
-          RDS_USERNAME: ${{ secrets.RDS_USERNAME }}
-          RDS_PASSWORD: ${{ secrets.RDS_PASSWORD }}
-          RDS_DATABASE: ${{ secrets.RDS_DATABASE }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      - name: Set up SSH key
         run: |
-          # Save SSH key to file
-          echo "$EC2_SSH_KEY" > ssh_key
-          chmod 600 ssh_key
+          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
+          chmod 600 key.pem
 
-          # Validate critical variables
-          if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$RDS_DATABASE" ]; then
-            echo "Missing required environment variables. Exiting."
-            exit 1
-          fi
+      - name: Copy project files to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "rm -rf ~/dream-vacation-app && mkdir -p ~/dream-vacation-app"
+          scp -o StrictHostKeyChecking=no -i key.pem -r docker-compose.yml dump.sql ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/dream-vacation-app/
 
-          # Copy files to EC2
-          scp -i ssh_key -o StrictHostKeyChecking=no docker-compose.yml $EC2_USERNAME@$EC2_HOST:/home/$EC2_USERNAME/
-          scp -i ssh_key -o StrictHostKeyChecking=no dreamvacations.sql $EC2_USERNAME@$EC2_HOST:/home/$EC2_USERNAME/
+      - name: Deploy and setup on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
+          set -e  # Exit on error
+          cd ~/dream-vacation-app
 
-          # SSH into EC2 and run deployment script
-          ssh -i ssh_key -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_HOST <<EOF
-            set -e
+          echo "Creating .env file..."
+          cat <<EOT > .env
+DB_HOST=${{ secrets.RDS_HOST }}
+DB_USER=${{ secrets.RDS_USERNAME }}
+DB_PASSWORD=${{ secrets.RDS_PASSWORD }}
+DB_NAME=${{ secrets.RDS_DATABASE }}
+EOT
 
-            # Install MySQL client
-            sudo apt-get update -y
-            sudo apt-get install -y mysql-client
+          echo "Installing MySQL client..."
+          sudo apt-get update && sudo apt-get install -y mysql-client
 
+          echo "Initializing database..."
+          mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p"${{ secrets.RDS_PASSWORD }}" <<MYSQL_SCRIPT
+          CREATE DATABASE IF NOT EXISTS ${{ secrets.RDS_DATABASE }};
+          USE ${{ secrets.RDS_DATABASE }};
+          MYSQL_SCRIPT
 
-            # Check if DB is empty
-            TABLE_COUNT=\$(mysql -h \$RDS_HOST -u \$RDS_USERNAME -p\$RDS_PASSWORD -D \$RDS_DATABASE -e "SHOW TABLES;" | wc -l)
-            if [ "\$TABLE_COUNT" -le 1 ]; then
-              echo "Database is empty. Importing SQL dump..."
-              mysql -h \$RDS_HOST -u \$RDS_USERNAME -p\$RDS_PASSWORD \$RDS_DATABASE < /home/$EC2_USERNAME/dreamvacations.sql
-            else
-              echo "Database already has tables. Skipping import."
-            fi
+          echo "Logging in to DockerHub..."
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
-            # Pull latest Docker images
-            echo "Pulling image: \$DOCKERHUB_USERNAME/dream-vacation-backend:latest"
-            docker pull \$DOCKERHUB_USERNAME/dream-vacation-backend:latest
-            docker pull \$DOCKERHUB_USERNAME/dream-vacation-frontend:latest
+          echo "Pulling Docker images..."
+          docker-compose pull
 
-            # Start Docker containers
-            cd /home/$EC2_USERNAME
-            docker-compose down
-            docker-compose up -d
-            EOF
+          echo "Starting containers..."
+          docker-compose down || true
+          docker-compose up -d
 
-          # Cleanup
-          rm ssh_key
+          echo "Waiting for services to initialize..."
+          sleep 30
+
+          echo "Importing database dump..."
+          mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p"${{ secrets.RDS_PASSWORD }}" ${{ secrets.RDS_DATABASE }} < dreamvacations.sql
+
+          echo "Verifying database..."
+          mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p"${{ secrets.RDS_PASSWORD }}" -e "SHOW TABLES" ${{ secrets.RDS_DATABASE }}
+
+          echo "Deployment completed successfully!"
+          EOF

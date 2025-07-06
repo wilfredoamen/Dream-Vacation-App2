@@ -2,30 +2,34 @@ version: '3.8'
 
 services:
   backend:
-    image: ${DOCKERHUB_USERNAME}/dream-vacation-backend:latest
+    image: wilfred2018/dream-vacation-backend
+    container_name: vacation-backend
     ports:
       - "3001:3001"
-    environment:
-      - DB_HOST=${RDS_HOST}
-      - DB_USER=${RDS_USERNAME}
-      - DB_PASSWORD=${RDS_PASSWORD}
-      - DB_NAME=${RDS_DATABASE}
-    restart: always
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - vacation-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://54.227.116.230:3001"]
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
 
   frontend:
-    image: ${DOCKERHUB_USERNAME}/dream-vacation-frontend:latest
+    image: wilfred2018/dream-vacation-frontend
+    container_name: vacation-frontend
     ports:
       - "3000:3000"
-    restart: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://54.227.116.230:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - vacation-net
+    environment:
+      - REACT_APP_API_URL=http://backend:3001
+
+networks:
+  vacation-net:
+    driver: bridge
