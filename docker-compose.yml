@@ -11,11 +11,6 @@ services:
     restart: unless-stopped
     networks:
       - vacation-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   frontend:
     image: wilfred2018/dream-vacation-frontend
