@@ -7,20 +7,24 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 3001;
 
-// Middleware
-app.use(cors());
+//  Middleware: CORS + JSON
+app.use(cors({
+  origin: 'http://34.228.44.78:3000',
+  methods: ['GET', 'POST', 'DELETE'],
+  credentials: false
+}));
 app.use(express.json());
 
 // MySQL Connection Pool
 const pool = mysql.createPool({
-  host: 'dreamvacations.c2jy4428k504.us-east-1.rds.amazonaws.com', // Replace with your host if different
-  user: 'admin', // Replace with your MySQL username
-  password: 'Oziegbe27', // Replace with your MySQL password
-  database: 'dreamvacations', // Replace with your database name
-  port: 3306, // Default MySQL port
+  host: 'dreamvacations.c2jy4428k504.us-east-1.rds.amazonaws.com',
+  user: 'admin',
+  password: 'Oziegbe27',
+  database: 'dreamvacations',
+  port: 3306,
 });
 
-// Ensure the table exists
+//  Ensure the table exists
 const createTable = async () => {
   const createTableQuery = `
     CREATE TABLE IF NOT EXISTS destinations (
@@ -38,14 +42,14 @@ const createTable = async () => {
     console.log('Table "destinations" ensured.');
   } catch (err) {
     console.error('Error ensuring table "destinations":', err.message);
-    process.exit(1); // Exit the app if the table creation fails
+    process.exit(1);
   }
 };
 
-// Initialize the table on server startup
+//  Initialize the table on server startup
 createTable();
 
-// Routes
+//  Routes
 app.get('/api/destinations', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM destinations ORDER BY id DESC');
@@ -59,16 +63,20 @@ app.get('/api/destinations', async (req, res) => {
 app.post('/api/destinations', async (req, res) => {
   const { country } = req.body;
   try {
-    // Fetch country data from external API
     const response = await axios.get(`${process.env.COUNTRIES_API_BASE_URL}/name/${encodeURIComponent(country)}`);
     const countryInfo = response.data[0];
 
-    // Insert data into the MySQL database
     const [result] = await pool.query(
       'INSERT INTO destinations (country, capital, population, region) VALUES (?, ?, ?, ?)',
       [country, countryInfo.capital[0], countryInfo.population, countryInfo.region]
     );
-    res.status(201).json({ id: result.insertId, country, capital: countryInfo.capital[0], population: countryInfo.population, region: countryInfo.region });
+    res.status(201).json({
+      id: result.insertId,
+      country,
+      capital: countryInfo.capital[0],
+      population: countryInfo.population,
+      region: countryInfo.region
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -86,7 +94,7 @@ app.delete('/api/destinations/:id', async (req, res) => {
   }
 });
 
-// Start Server
+//  Start Server
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
