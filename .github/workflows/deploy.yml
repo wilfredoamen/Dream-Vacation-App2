@@ -34,11 +34,11 @@ jobs:
 
           echo "=== Creating .env file ==="
           cat <<EOT > .env
-DB_HOST=${{ secrets.RDS_HOST }}
-DB_USER=${{ secrets.RDS_USERNAME }}
-DB_PASSWORD=${{ secrets.RDS_PASSWORD }}
-DB_NAME=${{ secrets.RDS_DATABASE }}
-EOT
+          DB_HOST=${{ secrets.RDS_HOST }}
+          DB_USER=${{ secrets.RDS_USERNAME }}
+          DB_PASSWORD=${{ secrets.RDS_PASSWORD }}
+          DB_NAME=${{ secrets.RDS_DATABASE }}
+          EOT
 
           echo "=== Installing MySQL client ==="
           if ! command -v mysql >/dev/null; then
