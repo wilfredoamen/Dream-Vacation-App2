@@ -20,16 +20,19 @@ jobs:
 
       - name: Copy project files to EC2
         run: |
-          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "rm -rf ~/dream-vacation-app && mkdir -p ~/dream-vacation-app"
-          scp -o StrictHostKeyChecking=no -i key.pem -r docker-compose.yml dump.sql ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/dream-vacation-app/
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+            "rm -rf ~/dream-vacation-app && mkdir -p ~/dream-vacation-app"
+          scp -o StrictHostKeyChecking=no -i key.pem -r \
+            docker-compose.yml dreamvacations.sql \
+            ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/dream-vacation-app/
 
       - name: Deploy and setup on EC2
         run: |
           ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
-          set -e  # Exit on error
+          set -e
           cd ~/dream-vacation-app
 
-          echo "Creating .env file..."
+          echo "=== Creating .env file ==="
           cat <<EOT > .env
 DB_HOST=${{ secrets.RDS_HOST }}
 DB_USER=${{ secrets.RDS_USERNAME }}
@@ -37,33 +40,50 @@ DB_PASSWORD=${{ secrets.RDS_PASSWORD }}
 DB_NAME=${{ secrets.RDS_DATABASE }}
 EOT
 
-          echo "Installing MySQL client..."
-          sudo apt-get update && sudo apt-get install -y mysql-client
+          echo "=== Installing MySQL client ==="
+          if ! command -v mysql >/dev/null; then
+            sudo apt-get update && sudo apt-get install -y mysql-client
+          fi
 
-          echo "Initializing database..."
-          mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p"${{ secrets.RDS_PASSWORD }}" <<MYSQL_SCRIPT
+          echo "=== Initializing database ==="
+          mysql -h "${{ secrets.RDS_HOST }}" -u "${{ secrets.RDS_USERNAME }}" \
+            -p"${{ secrets.RDS_PASSWORD }}" <<MYSQL_SCRIPT
           CREATE DATABASE IF NOT EXISTS ${{ secrets.RDS_DATABASE }};
           USE ${{ secrets.RDS_DATABASE }};
           MYSQL_SCRIPT
 
-          echo "Logging in to DockerHub..."
+          echo "=== Logging in to DockerHub ==="
           echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
-          echo "Pulling Docker images..."
+          echo "=== Pulling Docker images ==="
           docker-compose pull
 
-          echo "Starting containers..."
+          echo "=== Starting containers ==="
           docker-compose down || true
           docker-compose up -d
 
-          echo "Waiting for services to initialize..."
+          echo "=== Waiting for services to initialize ==="
           sleep 30
 
-          echo "Importing database dump..."
-          mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p"${{ secrets.RDS_PASSWORD }}" ${{ secrets.RDS_DATABASE }} < dreamvacations.sql
+          echo "=== Importing database dump ==="
+          if [ -f dreamvacations.sql ]; then
+            mysql -h "${{ secrets.RDS_HOST }}" -u "${{ secrets.RDS_USERNAME }}" \
+              -p"${{ secrets.RDS_PASSWORD }}" "${{ secrets.RDS_DATABASE }}" < dreamvacations.sql || {
+              echo "!!! ERROR: Database import failed" >&2
+              exit 1
+            }
+            echo "Database imported successfully"
+          else
+            echo "!!! ERROR: dreamvacations.sql not found" >&2
+            exit 1
+          fi
 
-          echo "Verifying database..."
-          mysql -h ${{ secrets.RDS_HOST }} -u ${{ secrets.RDS_USERNAME }} -p"${{ secrets.RDS_PASSWORD }}" -e "SHOW TABLES" ${{ secrets.RDS_DATABASE }}
+          echo "=== Verifying database ==="
+          mysql -h "${{ secrets.RDS_HOST }}" -u "${{ secrets.RDS_USERNAME }}" \
+            -p"${{ secrets.RDS_PASSWORD }}" -e "SHOW TABLES" "${{ secrets.RDS_DATABASE }}" || {
+            echo "!!! ERROR: Database verification failed" >&2
+            exit 1
+          }
 
-          echo "Deployment completed successfully!"
+          echo "✓✓✓ Deployment completed successfully ✓✓✓"
           EOF
