@@ -47,10 +47,7 @@ EOT
 
           echo "=== Initializing database ==="
           mysql -h "${{ secrets.RDS_HOST }}" -u "${{ secrets.RDS_USERNAME }}" \
-            -p"${{ secrets.RDS_PASSWORD }}" <<MYSQL_SCRIPT
-          CREATE DATABASE IF NOT EXISTS ${{ secrets.RDS_DATABASE }};
-          USE ${{ secrets.RDS_DATABASE }};
-          MYSQL_SCRIPT
+            -p"${{ secrets.RDS_PASSWORD }}" -e "CREATE DATABASE IF NOT EXISTS ${{ secrets.RDS_DATABASE }};"
 
           echo "=== Logging in to DockerHub ==="
           echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
@@ -80,7 +77,7 @@ EOT
 
           echo "=== Verifying database ==="
           mysql -h "${{ secrets.RDS_HOST }}" -u "${{ secrets.RDS_USERNAME }}" \
-            -p"${{ secrets.RDS_PASSWORD }}" -e "SHOW TABLES" "${{ secrets.RDS_DATABASE }}" || {
+            -p"${{ secrets.RDS_PASSWORD }}" -e "SHOW TABLES;" "${{ secrets.RDS_DATABASE }}" || {
             echo "!!! ERROR: Database verification failed" >&2
             exit 1
           }
