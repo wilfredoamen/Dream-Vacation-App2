@@ -1,19 +1,9 @@
-version: '3.8'
-
-services:
-  backend:
-    image: wilfred2018/dream-vacation-backend
-    container_name: vacation-backend
-    ports:
-      - "3001:3001"
-    env_file:
-      - .env
-    restart: unless-stopped
-    networks:
-      - vacation-net
-
   frontend:
-    image: wilfred2018/dream-vacation-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=http://34.228.44.78:3001
     container_name: vacation-frontend
     ports:
       - "3000:3000"
@@ -22,9 +12,3 @@ services:
       - backend
     networks:
       - vacation-net
-    environment:
-      - REACT_APP_API_URL=http://34.228.44.78:3001
-
-networks:
-  vacation-net:
-    driver: bridge
