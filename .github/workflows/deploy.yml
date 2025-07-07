@@ -23,7 +23,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
             "rm -rf ~/dream-vacation-app && mkdir -p ~/dream-vacation-app"
           scp -o StrictHostKeyChecking=no -i key.pem -r \
-            docker-compose.yml dreamvacations.sql \
+            docker-compose.yml dreamvacations.sql frontend \
             ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:~/dream-vacation-app/
 
       - name: Deploy and setup on EC2
